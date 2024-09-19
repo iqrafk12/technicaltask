@@ -1,0 +1,104 @@
+import requests
+import pandas as pd
+import re
+
+def fetch_artwork_metadata(artwork_id):
+    api_url = f'https://fxhash.xyz/generative/{artwork_id}'
+    try:
+        response = requests.get(api_url)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching metadata: {e}")
+        return {}
+
+def fetch_code_from_ipfs(ipfs_link):
+    try:
+        response = requests.get(ipfs_link)
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching code from IPFS: {e}")
+        return None
+
+def extract_p5_version(js_code):
+    version_pattern = re.compile(r'(?://|\b)version\s*([\d\.]+)', re.IGNORECASE)
+    match = version_pattern.search(js_code)
+    return match.group(1) if match else 'Version not found'
+
+def identify_libraries(js_code):
+    libraries = {}
+    patterns = {
+        'p5.js': r'p5\.min\.js',
+        'three.js': r'three\.min\.js',
+        'p5.sound.js': r'p5\.sound\.min\.js',
+        'ml5.js': r'ml5\.min\.js',
+        'tone.js': r'tone\.min\.js',
+        'matter.js': r'matter\.min\.js',
+        'two.js': r'two\.min\.js',
+        'processing.js': r'processing\.min\.js',
+        'p5.dom.js': r'p5\.dom\.min\.js',
+        'noise.js': r'noise\.min\.js'
+    }
+    for lib, pattern in patterns.items():
+        if re.search(pattern, js_code):
+            libraries[lib] = 'version found'
+    return libraries
+
+def analyze_artworks(artwork_ids):
+    results = []
+    for artwork_id in artwork_ids:
+        metadata = fetch_artwork_metadata(artwork_id)
+        if metadata:
+            ipfs_link = metadata.get('ipfs', 'N/A')
+            if ipfs_link != 'N/A':
+                js_code = fetch_code_from_ipfs(ipfs_link)
+                if js_code:
+                    libraries = identify_libraries(js_code)
+                    version = extract_p5_version(js_code)
+                    results.append({
+                        'Artwork ID': artwork_id,
+                        'IPFS Link': ipfs_link,
+                        'p5.js Version': version,
+                        'Libraries': libraries if libraries else 'None'
+                    })
+                else:
+                    results.append({
+                        'Artwork ID': artwork_id,
+                        'IPFS Link': ipfs_link,
+                        'p5.js Version': 'Error retrieving code',
+                        'Libraries': 'Error retrieving code'
+                    })
+            else:
+                results.append({
+                    'Artwork ID': artwork_id,
+                    'IPFS Link': 'N/A',
+                    'p5.js Version': 'No IPFS link',
+                    'Libraries': 'No IPFS link'
+                })
+        else:
+            results.append({
+                'Artwork ID': artwork_id,
+                'IPFS Link': 'N/A',
+                'p5.js Version': 'Error fetching metadata',
+                'Libraries': 'Error fetching metadata'
+            })
+    return results
+
+# Example usage
+artwork_ids = ['302001',
+'302005',
+'302009',
+'302013',
+'302017',
+'302021',
+'302025',
+'302029',
+'302033',
+'302037']  # Replace with actual artwork IDs
+results = analyze_artworks(artwork_ids)
+
+# Output results
+results_df = pd.DataFrame(results)
+results_df.to_csv('fxhash_analysis_results.csv', index=False)
+print(results_df)
